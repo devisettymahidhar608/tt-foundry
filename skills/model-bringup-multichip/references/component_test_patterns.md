@@ -150,11 +150,12 @@ python .../probe_host.py --parallelism-mode "$MODE" [--expected-mesh-chips N] -o
 
 | Mode | Host requirement | n300 llmbox (8 chips, 4 boards) |
 |------|------------------|----------------------------------|
-| `single_device` | `runtime_chip_count==1` | **SKIP** — user moves to 1-chip n150/p150 host |
+| `single_device` | at least one chip | **Run** — unsharded, on whatever mesh it compiles to; no `TT_VISIBLE_DEVICES` |
 | `tensor_parallel` | `runtime_chip_count>=2`, mesh ∈ `valid_tp_degrees` | **Run** — `TT_VISIBLE_DEVICES=0,1,2,3` from tt-smi; mesh (1,8) |
 
-- **n150/p150 bringup:** dedicated host only; orchestrator **skips** on fabric — pinning
-  `TT_VISIBLE_DEVICES=0` is **not** supported.
+- **n150/p150 bringup:** unsharded; runs on whatever mesh it compiles to, so host
+  chip count is not a gate. Do **not** set `TT_VISIBLE_DEVICES`. Arch from silicon
+  (blackhole → `p150`, wormhole → `n150`).
 - **TP bringup:** `TT_VISIBLE_DEVICES` from **tt-smi** board IDs; mesh from **runtime**
   chip count. Install tt-smi if missing; `tt-smi -r` to reset boards after hangs.
 - On skip: print `component_skip_reason` and ask user to **change machine**.

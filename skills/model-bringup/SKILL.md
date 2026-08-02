@@ -171,7 +171,7 @@ fi
 
 | `parallelism_mode` | Example on n300 llmbox (8 chips, 4 boards) |
 |--------------------|---------------------------------------------|
-| `single_device` | **SKIP** — no n150; user moves to 1-chip host |
+| `single_device` | **Run** — unsharded, on whatever mesh it compiles to |
 | `tensor_parallel` | Run if mesh ∈ `valid_tp_degrees` (2/4/8); `TT_VISIBLE_DEVICES=0,1,2,3` |
 
 Re-probe before **VERIFY** after repair. If skip → `stage: host_skip`, print

@@ -24,9 +24,17 @@ MULTICHIP_BRINGUP_ARCHES = frozenset(
     {"n300", "n300-llmbox", "galaxy-wh-6u", "lb-blackhole", "qb2-blackhole"}
 )
 
+# Observed silicon family -> single-chip bringup arch. Attribution comes from the
+# SILICON, never the host name: one chip of a qb2-blackhole is a Blackhole, so it
+# reports p150 — never n150.
+SILICON_TO_SINGLE_CHIP_ARCH = {"blackhole": "p150", "wormhole": "n150"}
+
 SINGLE_CHIP_HOST_NOTE = (
-    "Single-chip bringup (n150/p150) requires runtime_chip_count==1 on a dedicated host. "
-    "Do not run on n300-llmbox / qb / galaxy / lb fabric — TT_VISIBLE_DEVICES=0 is not valid bringup."
+    "A component runs on whatever mesh its graph compiles to; the host's chip count "
+    "does not gate it. Run the unsharded test on the box you have — if it passes, it "
+    "passed on the mesh it compiled to. Do not set TT_VISIBLE_DEVICES for single-device "
+    "runs. Record the arch from the observed silicon (blackhole->p150, wormhole->n150), "
+    "not from the host name."
 )
 MULTICHIP_HOST_NOTE = (
     "Multichip: mesh uses runtime_chip_count (XLA). TT_VISIBLE_DEVICES uses visible_board_count "
@@ -198,17 +206,41 @@ def resolve_visible_board_count(runtime: dict, tt_smi: dict) -> tuple[int, str, 
     return board_count, visible_devices_for_count(board_count), prov
 
 
+def resolve_single_chip_arch(host: dict) -> tuple[str, str]:
+    """Map the OBSERVED silicon to a single-chip bringup arch.
+
+    Returns (arch, provenance). Empty arch means the silicon family could not be
+    identified, so a single-chip result could not be attributed honestly.
+    """
+    dev_arch = (host.get("device_arch") or "").lower()
+    for silicon, arch in SILICON_TO_SINGLE_CHIP_ARCH.items():
+        if silicon in dev_arch:
+            return arch, f"device_arch={dev_arch!r} -> {arch}"
+    env_arch = (host.get("tt_xla_arch_env") or "").strip()
+    if env_arch in SINGLE_CHIP_BRINGUP_ARCHES:
+        return env_arch, f"TT_XLA_ARCH={env_arch!r} (device_arch unavailable)"
+    return "", (
+        f"silicon family unknown (device_arch={dev_arch!r}, "
+        f"TT_XLA_ARCH={env_arch!r} is not a single-chip arch)"
+    )
+
+
 def single_chip_bringup_eligible(host: dict) -> tuple[bool, str]:
+    """Host chip count does not gate a single-device component.
+
+    The component runs on whatever mesh its graph compiles to, so there is
+    nothing here to decide: run it on the box you have. The old rule refused
+    runtime_chip_count != 1, which blocked components that fit one chip (a
+    0.34 GB VAE on a 4-chip quiet box) purely because the host had spare silicon.
+    Only "no TT device at all" is a real blocker.
+    """
     if host.get("probe_error"):
         return False, f"host probe failed: {host['probe_error']}"
     chips = int(host.get("runtime_chip_count") or 0)
-    if chips != 1:
-        env_arch = host.get("tt_xla_arch_env") or host.get("inferred_bringup_arch") or ""
+    if chips < 1:
         return False, (
-            f"single-chip bringup requires runtime_chip_count==1 (dedicated host). "
-            f"This session has runtime_chip_count={chips} (TT_XLA_ARCH={env_arch!r}). "
-            "Fabric hosts (n300-llmbox, qb, galaxy, lb) cannot run n150/p150 bringup — "
-            "change to a 1-board machine and re-run /model-bringup."
+            f"single-chip bringup requires at least one TT device "
+            f"(runtime_chip_count={chips})."
         )
     return True, ""
 
@@ -376,6 +408,9 @@ def classify(runtime: dict, tt_smi: dict) -> dict:
 
     host["can_run_single_chip_bringup"] = sc_ok
     host["single_chip_skip_reason"] = sc_reason if not sc_ok else ""
+    sc_arch, sc_arch_prov = resolve_single_chip_arch(host)
+    host["single_chip_arch"] = sc_arch
+    host["single_chip_arch_provenance"] = sc_arch_prov
     host["can_run_multichip_bringup"] = mc_ok and vis_ok
     host["multichip_skip_reason"] = mc_reason if not mc_ok else (vis_reason if not vis_ok else "")
     host["tt_visible_devices_env_valid"] = vis_ok
