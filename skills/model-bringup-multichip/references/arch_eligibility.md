@@ -4,24 +4,29 @@
 
 Before any HW run, use **`host_device_probe.md`** and `scripts/probe_host.py`.
 
-- **n150/p150 bringup (`single_device`):** `runtime_chip_count` must be **1** (dedicated host).
-  Skip on n300-llmbox / qb / galaxy / lb fabric — **no** `TT_VISIBLE_DEVICES=0` workaround.
+- **n150/p150 bringup (`single_device`):** runs on **any** host with at least one
+  chip — the component uses whatever mesh its graph compiles to, so host chip count
+  does not gate it. **Do not set `TT_VISIBLE_DEVICES`.** Arch comes from the observed
+  silicon: blackhole → `p150`, wormhole → `n150`.
 - **Multichip TP (`tensor_parallel`):** `runtime_chip_count >= 2`; `TT_VISIBLE_DEVICES` from
   **tt-smi** resettable boards; mesh from runtime chip count.
-- **n300 llmbox (4 boards, 8 chips):** single-device n150 **cannot run**; multichip only
-  **2, 4, or 8** way TP (`valid_tp_degrees` in probe JSON).
 - **Connected boards:** known via **`tt-smi -ls` only** — not from runtime device count.
 - Install tt-smi if missing: `git clone https://github.com/tenstorrent/tt-smi && cd tt-smi && pip install .`
 - Reset after bad state: `tt-smi -r`
 
 ## Component vs host matrix
 
-| Host | `runtime_chip_count` | `single_device` (n150/p150) | `tensor_parallel` |
-|------|----------------------|----------------------------|-------------------|
+| Host | `runtime_chip_count` | `single_device` (unsharded) | `tensor_parallel` |
+|------|----------------------|------------------------------------|-------------------|
 | Dedicated n150/p150 | 1 | **Run** | **Skip** — need multichip host |
-| lb-blackhole / qb2 | 4 | **Skip** | **Run** if mesh ∈ {2,4}; `TT_VISIBLE_DEVICES` from tt-smi |
-| n300 llmbox | 8 | **Skip** | **Run** if mesh ∈ {2,4,8}; e.g. `TT_VISIBLE_DEVICES=0,1,2,3` |
-| galaxy-wh-6u | 32 | **Skip** | **Run** if mesh ∈ {2,4,8,32}; meshes `(4,8)` / `(8,4)` — see `host_device_probe.md` |
+| lb-blackhole / qb2 | 4 | **Run** as `p150` | **Run** if mesh ∈ {2,4}; `TT_VISIBLE_DEVICES` from tt-smi |
+| n300 llmbox | 8 | **Run** as `n150` | **Run** if mesh ∈ {2,4,8}; e.g. `TT_VISIBLE_DEVICES=0,1,2,3` |
+| galaxy-wh-6u | 32 | **Run** as `n150` | **Run** if mesh ∈ {2,4,8,32}; meshes `(4,8)` / `(8,4)` — see `host_device_probe.md` |
+
+So a whole pipeline is brought up on one machine: the weight-bound component runs
+N-way TP, and every other component runs `single_device` **unsharded** on the same
+box, on whatever mesh it compiles to. Record the mesh the passing run actually
+used — do not assume it.
 
 Orchestrator checks `weight_fit.json` → `parallelism_mode` and probe → `can_run_component`.
 On mismatch: `host_skip`, print `component_skip_reason`, ask user to change machine.

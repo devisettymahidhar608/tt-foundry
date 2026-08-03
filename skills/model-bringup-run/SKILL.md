@@ -26,15 +26,23 @@ python .../probe_host.py --parallelism-mode single_device -o host_probe.json
 CAN=$(jq -r '.can_run_component // .can_run_single_chip_bringup' host_probe.json)
 if [ "$CAN" != "true" ]; then
   # Abort: print jq -r '.component_skip_reason // .single_chip_skip_reason'
-  # User must change to dedicated n150/p150 host (runtime_chip_count==1)
+  # Only fails when no TT device is visible at all
 fi
 export TT_XLA_ARCH=$ARCH
-export TT_VISIBLE_DEVICES=0
+# Do NOT set TT_VISIBLE_DEVICES — the unsharded graph picks its own mesh
 ```
 
-**Do not** run n150/p150 bringup on n300-llmbox, qb, galaxy, or lb fabric
-(`runtime_chip_count > 1`). On 4-board n300 there is **no n150 single-device** —
-only multichip TP (2/4/8 chips) is valid. **`TT_VISIBLE_DEVICES=0` does not qualify**.
+A single-device component runs **unsharded** on whatever mesh its graph compiles
+to, so the host's chip count does not gate it and **`TT_VISIBLE_DEVICES` need not
+be set**. Run it on the box you have; if it passes, record the mesh the run
+actually compiled to rather than assuming one.
+
+This is what lets a pipeline be brought up on one machine: the weight-bound
+component runs tensor-parallel across the box, and every component that fits one
+chip runs single-device on that same box — unsharded, no second host.
+
+The arch comes from the observed silicon, never the host name, so a Blackhole box
+records `p150` (`filter_arch_queue` drops `n150`).
 
 **Multichip** (`tensor_parallel`) uses `model-bringup-run-torch-tp` (separate host gate).
 
@@ -59,7 +67,7 @@ only multichip TP (2/4/8 chips) is valid. **`TT_VISIBLE_DEVICES=0` does not qual
    the test must use `ComparisonConfig(pcc=PccConfig(required_pcc=0.99))`.
    ```bash
    TEST_PATH=$(jq -r '.components[] | select(.name=="<component>") | .test_path' weight_fit.json)
-   TT_VISIBLE_DEVICES=0 TT_XLA_ARCH=$ARCH timeout $TIMEOUT_S python -m pytest -svv "$TEST_PATH" ...
+   TT_XLA_ARCH=$ARCH timeout $TIMEOUT_S python -m pytest -svv "$TEST_PATH" ...
    ```
    A PASSED result means PCC **was** evaluated at 0.99 (or whatever the test sets).
 5. **Monolithic / runner collect:** if no `test_path` under `tests/torch/models/`,

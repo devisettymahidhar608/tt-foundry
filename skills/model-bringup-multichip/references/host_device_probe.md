@@ -78,7 +78,7 @@ Then check `host_probe.json` (re-run probe if stale):
 
 | `parallelism_mode` | Requires | n300 llmbox (4 boards, 8 chips) | galaxy-wh-6u (32 chips) |
 |--------------------|----------|-----------------------------------|-------------------------|
-| **`single_device`** | `runtime_chip_count == 1` | **SKIP** — switch to 1-chip host | **SKIP** — same |
+| **`single_device`** | `runtime_chip_count >= 1` | **OK** — unsharded | **OK** — same |
 | **`tensor_parallel`** | `runtime_chip_count >= 2` + mesh ∈ `valid_tp_degrees` | **OK** mesh 8 (or 2/4); `TT_VISIBLE_DEVICES` from tt-smi | **OK** mesh **32** (or 2/4/8); `TT_VISIBLE_DEVICES` from tt-smi |
 
 **Valid multichip TP degrees:** powers of 2 dividing `runtime_chip_count` (probe field
@@ -100,7 +100,7 @@ Use **`can_run_component`** and **`component_skip_reason`** from probe when
   runtime_chip_count=<N>  visible_board_count=<B>
   recommended TT_VISIBLE_DEVICES=<multichip_bringup value>
   Reason: <component_skip_reason | single_chip_skip_reason | multichip_skip_reason>
-  Action: switch to a <dedicated n150/p150 1-chip host | multichip host with N chips> and re-run.
+  Action: <set TT_XLA_ARCH so the silicon can be attributed | switch to a multichip host with N chips> and re-run.
 ```
 
 ---
@@ -167,7 +167,7 @@ Print `component_skip_reason` / `board_vs_chip_note` to user.
 ```
 runtime_chip_count     = 8     → mesh (1, 8) or (2, 4)     valid_tp_degrees: [2, 4, 8]
 visible_board_count    = 4     → TT_VISIBLE_DEVICES=0,1,2,3  (tt-smi -ls)
-single_device (n150)   = NO    → use dedicated 1-chip host for VAE etc.
+single_device          = YES   → run unsharded; recorded as n150
 ```
 
 ---
@@ -177,7 +177,7 @@ single_device (n150)   = NO    → use dedicated 1-chip host for VAE etc.
 ```
 runtime_chip_count     = 4     → mesh (1, 4) or (2, 2)     valid_tp_degrees: [2, 4]
 visible_board_count    = from tt-smi (often 4 board IDs — confirm with probe)
-single_device (n150)   = NO
+single_device          = YES   → run unsharded; recorded as p150
 TT_XLA_ARCH            = lb-blackhole or qb2-blackhole
 ```
 
@@ -191,7 +191,7 @@ Use `--expected-mesh-chips 4` when promotion/scaffold targets 4-way TP.
 runtime_chip_count     = 32    → mesh (4, 8) or (8, 4)     valid_tp_degrees: [2, 4, 8, 32]
 visible_board_count    = from tt-smi ONLY — do not derive from runtime_chip_count
 TT_VISIBLE_DEVICES     = probe recommended_tt_visible_devices.multichip_bringup
-single_device (n150)   = NO
+single_device          = YES   → run unsharded; recorded as n150
 TT_XLA_ARCH            = galaxy-wh-6u
 ```
 
