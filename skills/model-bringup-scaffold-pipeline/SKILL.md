@@ -234,7 +234,31 @@ Parse `capture.log` into a per-component **I/O spec** dict and record:
 - **non-tensor inputs** (the pinned structural args, with their literal values),
 - outputs (shape, dtype),
 - `denoise_steps_observed`,
-- whether each component is called once per pipeline call or once per step.
+- whether each component is called once per pipeline call or once per step,
+- **`provenance` per field** — `observed` or `authored` (see Hard rules).
+
+`observed` means the value was read out of a real call: a `FWD_IN` line, a
+tokenizer, the scheduler, or an upstream component's output. Anything else is
+`authored` — including analytically derived fields (the VAE latent shape above)
+and any field with no upstream producer in your capture chain.
+
+Each `authored` field is an open question. Resolve it against its real producer
+before writing the loader:
+
+- **Batch dim** — read the pipeline's call site. CFG (`guidance_scale > 1`)
+  concatenates `[uncond, cond]` before the denoise loop, so the DiT runs at
+  **batch 2** while text encoders and VAE stay at 1.
+- **`timesteps` / `sigmas`** — read them off the scheduler; a float here
+  compiles a different graph than production:
+  ```python
+  sch = SchedulerClass.from_pretrained(repo, subfolder="scheduler")
+  sch.set_timesteps(50); sch.timesteps.dtype   # e.g. torch.int64
+  ```
+- **`input_ids` / masks** — run the real tokenizer on a real prompt.
+
+An unresolvable field may still ship, but stays tagged `authored` and is named
+as a guess in `model_overview.md`. Do not call a spec "captured" unless every
+field is `observed`.
 
 Save `spec` to `scaffold_pipeline.json` under `io_spec`, and also dump the raw
 parsed values to `io_spec_raw.json` for auditability.
@@ -406,14 +430,21 @@ third_party/tt_forge_models/<family>/
    direct `from_pretrained(..., subfolder=...)`, calls `.eval()`, and returns
    the wrapped module.
 
-6. **`load_inputs(dtype_override=..., batch_size=1)`** synthesizes tensors at
-   the captured shapes with `torch.randn` (float dtypes) / `torch.randint`
-   (int dtypes like `input_ids`, masks, timesteps). Return them **as a list in
-   the wrapper's `forward` arg order**. Do **not** call the pipeline to derive
-   inputs — that breaks component isolation.
+6. **`load_inputs(dtype_override=..., batch_size=<observed call-site batch — do
+   not assume 1>)`** synthesizes tensors at the captured shapes with
+   `torch.randn` (float dtypes) / `torch.randint` (int dtypes like `input_ids`,
+   masks, timesteps). Return them **as a list in the wrapper's `forward` arg
+   order**. Do **not** call the pipeline to derive inputs — that breaks
+   component isolation.
+
+   Build every field at its captured dtype, not the model dtype: `timesteps`
+   captured as `int64` needs `torch.full(..., dtype=torch.int64)`, never
+   `torch.ones(b, dtype=dtype)`.
 
 Run `model-bringup-overview`-style sanity: import the loader, resolve each
-variant, and confirm `load_inputs()` shapes match `_COMPONENT_IO_SPEC`.
+variant, and confirm `load_inputs()` shapes match `_COMPONENT_IO_SPEC`. This
+proves nothing for `authored` fields — those match themselves. Report them as
+unverified.
 
 ---
 
@@ -552,6 +583,15 @@ if any component is still pending a HW run).
 
 ## Hard rules
 
+- **Tag every captured field with its provenance.** In `io_spec`, mark each
+  input `observed` (read from a real call — by the pipeline, scheduler, or
+  tokenizer) or `authored` (a value you invented because nothing upstream
+  produced it). A loader must not ship an `authored` field: resolve it against
+  its real producer first, or state plainly in the overview that it is a guess.
+  Never validate `load_inputs()` against a spec field you authored — that
+  checks a guess against itself. A default copied from a template is not a
+  decision: when a model-specific fact contradicts a template default, the fact
+  wins.
 - **Single-device first.** Bring each component up on one device before any
   multi-chip work. A PR with one passing component + OOM-xfailed big components
   is complete and landable.
