@@ -267,9 +267,10 @@ FINALIZE (G6+G7) — runs only after a successful CONFIG_UPDATE(--apply):
 |--------------------------------------------------------------|--------------------------------------|
 | `github:<org>/<repo>` / `https://github.com/...` / `git+https://...` | `model-bringup-scaffold-github`    |
 | HF id whose `model_index.json` is a `DiffusionPipeline`     | `model-bringup-scaffold-pipeline`   |
+| Audio / speech model (see below)                            | `model-bringup-scaffold-audio`      |
 | Anything else (structured key or plain HF id)               | `model-bringup-scaffold`            |
 
-All three scaffold variants share the same exit contract: PASSED writes
+All four scaffold variants share the same exit contract: PASSED writes
 a loader at `third_party/tt_forge_models/<family>/pytorch/loader.py` and
 initialises `state.json`. The orchestrator does not need to special-case
 the variant after VALIDATE. On failure → ESCALATED.
@@ -282,7 +283,23 @@ the gitlink — must be staged by FINALIZE along with the loader.
 
 Routing precedence: if the user explicitly passed a variant flag (e.g.
 hypothetical future `--scaffold github`), respect it; otherwise pick by
-the table above.
+the table above. Audio is checked **before** the default row and **after**
+the pipeline row (an audio DiffusionPipeline is still a pipeline).
+
+**Audio detection (`model-bringup-scaffold-audio`):** route here when any of
+these hold — the model's `ModelTask` is `AUDIO_ASR`, `AUDIO_CLS`, `MM_TTS` or
+`MM_AUDIO_TTT`; the processor exposes a `feature_extractor` with a
+`sampling_rate`; the config declares `num_mel_bins` / `num_codebooks`; or the
+model card describes TTS, ASR, voice cloning, speech translation, vocoding or
+music generation. Audio models break the default scaffold's assumptions on
+inputs (real waveforms behind a feature extractor), graph shape (many TTS
+models have no single traceable forward) and outputs (spectrograms/waveforms,
+not logits). That skill classifies into six audio archetypes and picks the
+loader shape per archetype.
+
+Archetype-6 (multi-component TTS) families follow the same per-component
+single-device discipline as pipeline families, and their natural follow-up
+after CONFIG_UPDATE is `audio-pipeline-e2e` for the real text→waveform run.
 
 **Pipeline families (`model-bringup-scaffold-pipeline`):** bring up **each
 component separately** using `weight_fit.json` → `components[].test_path`
