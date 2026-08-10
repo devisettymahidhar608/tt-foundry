@@ -17,6 +17,15 @@ You are the **scaffold and validation** stage of the model bringup pipeline.
 > component, captures real per-component I/O shapes, and emits
 > shard specs / `TT_VISIBLE_DEVICES` planning.
 
+> **Audio / speech models — delegate.** If the target is an audio or speech
+> model (`ModelTask` in `AUDIO_ASR` / `AUDIO_CLS` / `MM_TTS` / `MM_AUDIO_TTT`,
+> a processor with a `feature_extractor.sampling_rate`, a config with
+> `num_mel_bins` / `num_codebooks`, or a card describing TTS / ASR / voice
+> cloning / speech translation / vocoding / music generation), do **not**
+> scaffold here. Synthetic tensors are not a valid input for audio, many TTS
+> stacks have no single traceable forward, and the output is a spectrogram or
+> waveform rather than logits. Hand off to `model-bringup-scaffold-audio`.
+
 ## Invocation
 `/model-bringup-scaffold <model_key> [--arch <arch>] [--custom-test]`
 

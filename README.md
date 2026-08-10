@@ -11,6 +11,8 @@ skills/
 ├── model-bringup-scaffold/           # VALIDATE stage — loader scaffold + state.json (HuggingFace default)
 ├── model-bringup-scaffold-github/    # VALIDATE variant — model source lives on GitHub (vendor or port)
 ├── model-bringup-scaffold-pipeline/  # VALIDATE variant — multi-component HF DiffusionPipeline (per-component loaders, shard specs)
+├── model-bringup-scaffold-audio/     # VALIDATE variant — audio/speech (TTS, ASR, vocoder, audio-LLM, music) + references/
+├── audio-pipeline-e2e/               # E2E audio pipeline (text → waveform on device) after audio components pass
 ├── model-bringup-overview/           # OVERVIEW stage — CPU sanity + golden.pt capture, model_overview.md
 ├── model-bringup-run/                # FIRST_RUN / VERIFY stages — pytest under 5-min budget
 ├── model-bringup-diagnose/           # DIAGNOSE stage — pattern-match failure log → JSON
@@ -48,7 +50,8 @@ skills/
 scaffold  overview   run    diagnose     repair    verify     config-update   finalize
    │                                        │
    ├─ scaffold-github  (GitHub-hosted)      ▼
-   └─ scaffold-pipeline (DiffusionPipeline) runtime-failure-debugger
+   ├─ scaffold-pipeline (DiffusionPipeline) runtime-failure-debugger
+   └─ scaffold-audio    (TTS / ASR / vocoder / audio-LLM / music)
                                             │
                                             ▼
                                   graph-break-analysis
@@ -65,6 +68,9 @@ Auxiliary skills hang off the same FSM but enter from different states:
   (`FAILED_FE_COMPILATION` with "no unpack_forward_output handler")
 - `code-reviewer` — review a diff (C++/Python checklist, standards, antipatterns)
   or run the mechanical pre-PR self-review (lint / SPDX / test coverage / commit messages)
+- `audio-pipeline-e2e` — after a multi-component TTS/music model's components
+  pass individually, author `pipeline.py` (learned modules on TT, tokenizer /
+  mel front-end / sampling on the host), the e2e test and a WAV-emitting demo
 - `create-pr` — open the PR after `finalize` produces the branch + body draft
 
 ## Single-chip vs multichip (initial v1)
