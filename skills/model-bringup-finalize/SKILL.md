@@ -73,6 +73,19 @@ git diff --name-only            # working tree, in case scaffold/repair did not 
 
 Concatenate and dedupe. Skip files outside the repo (just in case).
 
+**GitHub-sourced models (`details.scaffold_variant == "github"`):** the
+loader and its submodule live inside `tt-forge-models`, so the commands
+above will not list them. Collect those separately:
+```bash
+git -C third_party/tt_forge_models diff --name-only
+git -C third_party/tt_forge_models status --short .gitmodules
+```
+Both the `.gitmodules` entry and the `third_party/<repo>` gitlink must
+appear as pending changes in `tt-forge-models`. If the loader is present
+but the submodule is not registered, stop and report it — the change is
+incomplete and would break a fresh clone. Never resolve this by copying
+the upstream source into the tree.
+
 If `--apply`:
 ```bash
 pre-commit run --files <space-separated changed file list> 2>&1 \
@@ -131,6 +144,7 @@ Adds a single-device-inference path for `<family>` (`<HF model ID>`).
 
 ## Highlights
 - Loader      : third_party/tt_forge_models/<family>/pytorch/loader.py
+- Source       : <HF id> | submodule `third_party/<repo>` @ `<short_sha>` (github)
 - Params      : <X> B (source: <loader|config|name_heuristic>)
 - Modality    : <text|vision|...>
 - Archs       : <comma-list of all passing archs>

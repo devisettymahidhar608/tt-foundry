@@ -274,6 +274,12 @@ a loader at `third_party/tt_forge_models/<family>/pytorch/loader.py` and
 initialises `state.json`. The orchestrator does not need to special-case
 the variant after VALIDATE. On failure → ESCALATED.
 
+**GitHub sources are always submoduled.** `model-bringup-scaffold-github`
+adds the upstream repo to `tt-forge-models` as a git submodule at
+`third_party/<repo>/` (repo name verbatim) and never copies source into
+the tree. The extra artifacts it produces — the `.gitmodules` entry and
+the gitlink — must be staged by FINALIZE along with the loader.
+
 Routing precedence: if the user explicitly passed a variant flag (e.g.
 hypothetical future `--scaffold github`), respect it; otherwise pick by
 the table above.
